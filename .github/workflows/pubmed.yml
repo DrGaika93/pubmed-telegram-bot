@@ -1,8 +1,8 @@
-name: Medical Telegram Bot
+name: PubMed Telegram Bot
 
 on:
   schedule:
-    - cron: "0 9 * * *"   # каждый день в 09:00 UTC
+    - cron: "0 9 * * *"
   workflow_dispatch:
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests beautifulsoup4
+        run: pip install -r requirements.txt
 
       - name: Run bot
         env:
