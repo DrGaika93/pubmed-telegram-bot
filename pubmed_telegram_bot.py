@@ -59,7 +59,10 @@ def send_to_telegram(text: str):
         "disable_web_page_preview": False,
     }
 
-    requests.post(url, json=payload, timeout=20)
+    response = requests.post(url, json=payload, timeout=20)
+
+    print("TELEGRAM STATUS:", response.status_code)
+    print("TELEGRAM RESPONSE:", response.text)
 
 
 def process_feeds():
