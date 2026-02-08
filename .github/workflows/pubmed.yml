@@ -1,29 +1,27 @@
-name: Medical RSS Telegram Bot PRO
+name: Medical Telegram Bot
 
 on:
   schedule:
-    - cron: "0 9 * * *"   # каждый день в 09:00 UTC (≈ 11:00 по Европе)
-  workflow_dispatch:       # кнопка Run workflow вручную
+    - cron: "0 9 * * *"   # каждый день в 09:00 UTC
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: 📦 Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      - name: 🚀 Run Telegram bot
+      - name: Run bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
