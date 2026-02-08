@@ -175,14 +175,12 @@ import time
 from telegram import Bot
 
 async def main():
-    print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
     print("=== СТАРТ БОТА ===")
 
     bot = Bot(token=TELEGRAM_TOKEN)
-    memory = load_memory()
 
-    sent_pubmed = 0
-    sent_cyber = 0
+    memory = load_memory()
+    sent_today = 0
 
     # -------- PUBMED --------
     print("=== PUBMED ===")
@@ -266,5 +264,7 @@ print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
 
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
+
 
