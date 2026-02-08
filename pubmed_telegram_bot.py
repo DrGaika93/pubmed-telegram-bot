@@ -87,18 +87,5 @@ def process_feeds():
         except Exception as e:
             print("Ошибка обработки RSS:", e)
 
-
-def main_loop():
-    """Бесконечный цикл работы бота"""
-
-    print("Бот запущен:", datetime.now())
-
-    while True:
-        print("Проверка RSS:", datetime.now())
-        process_feeds()
-
-        time.sleep(CHECK_INTERVAL_MINUTES * 60)
-
-
 if __name__ == "__main__":
-    main_loop()
+    process_feed()
