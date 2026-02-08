@@ -88,4 +88,4 @@ def process_feeds():
             print("Ошибка обработки RSS:", e)
 
 if __name__ == "__main__":
-    process_feed()
+    process_feeds()
