@@ -5,6 +5,7 @@ import os
 import json
 import time
 import requests
+from bs4 import BeautifulSoup
 import feedparser
 from bs4 import BeautifulSoup
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
@@ -136,22 +137,35 @@ def fetch_pubmed_details(pmid: str):
 
 # ================= CYBERLENINKA =================
 
-def parse_cyberleninka(category: str, url: str):
+def parse_cyberleninka_html(category, url, limit=4):
     articles = []
-    try:
-        feed = feedparser.parse(url)
 
-        for entry in feed.entries[:5]:
-            title = entry.get("title", "Без заголовка")
-            link = entry.get("link")
-            summary = BeautifulSoup(entry.get("summary", ""), "html.parser").get_text()
+    try:
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        items = soup.select(".article-item")
+
+        for item in items[:limit]:
+            title_tag = item.select_one(".article-item__title")
+            link_tag = item.select_one("a")
+
+            if not title_tag or not link_tag:
+                continue
+
+            title = title_tag.get_text(strip=True)
+            link = "https://cyberleninka.ru" + link_tag.get("href")
+
+            summary_tag = item.select_one(".article-item__annotation")
+            summary = summary_tag.get_text(strip=True) if summary_tag else "Аннотация отсутствует"
 
             articles.append((category, title, summary, link))
 
     except Exception as e:
-        print("Ошибка парсинга КиберЛенинки:", e)
+        print("Ошибка HTML-парсинга КиберЛенинки:", e)
 
     return articles
+
 
 
 # ================= MAIN =================
@@ -210,16 +224,17 @@ async def main():
             await asyncio.sleep(2)
 
     # -------- CYBERLENINKA --------
-    print("=== КИБЕРЛЕНИНКА ===")
+print("=== КИБЕРЛЕНИНКА ===")
 
-    for category, rss in CYBERLENINKA_RSS.items():
-        if sent_cyber >= CYBERLENINKA_LIMIT:
-            break
+sent_cyber = 0
 
-        articles = parse_cyberleninka(category, rss)
+if sent_today < MAX_ARTICLES_PER_DAY:
+    for category, url in CYBERLENINKA_URLS.items():
+
+        articles = parse_cyberleninka_html(category, url, limit=3)
 
         for _, title, summary, link in articles:
-            if sent_cyber >= CYBERLENINKA_LIMIT:
+            if sent_today >= MAX_ARTICLES_PER_DAY:
                 break
 
             if link in memory:
@@ -236,17 +251,18 @@ async def main():
                     disable_web_page_preview=True,
                 )
             except Exception as e:
-                print("Ошибка Telegram (CyberLeninka):", e)
+                print("Ошибка Telegram:", e)
                 continue
 
             memory.add(link)
+            sent_today += 1
             sent_cyber += 1
-            await asyncio.sleep(2)
+            time.sleep(2)
 
-    save_memory(memory)
+        if sent_today >= MAX_ARTICLES_PER_DAY:
+            break
 
-    print(f"✅ PubMed отправлено: {sent_pubmed}")
-    print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
+print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
 
 
 if __name__ == "__main__":
