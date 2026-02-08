@@ -163,7 +163,7 @@ if __name__ == "__main__":
 # === DAILY AUTORUN SETUP ===
 
 ## Option 1: Cron (Linux / Railway)
-Run the bot every day at 09:00:
+# Run the bot every day at 09:00:
 
 ```bash
 0 9 * * * python med_pro_telegram_bot.py
