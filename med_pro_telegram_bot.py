@@ -90,12 +90,27 @@ def fetch_details(pmid: str):
     return title, abstract, link
 
 
+def html_escape(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
 def build_message(category: str, title: str, text: str, link: str):
+    title = html_escape(title)
+    text = html_escape(text)
+
     short_text = text[:1200] + "..." if len(text) > 1200 else text
 
     message = (
-        f"{category}\n\n"
-        f"<b>{title}</b>\n\n"
+        f"{category}
+
+"
+        f"<b>{title}</b>
+
+"
         f"{short_text}"
     )
 
