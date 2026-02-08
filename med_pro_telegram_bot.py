@@ -6,6 +6,7 @@ import time
 import requests
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -15,12 +16,15 @@ MEMORY_FILE = "sent_articles.json"
 PUBMED_API = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 PUBMED_FETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
+
 TOPICS = {
     "🫁 Пульмонология": "(asthma OR COPD OR pulmonary OR lung)",
     "🌿 Аллергология": "(allergy OR allergic OR rhinitis)",
     "🩺 Терапия": "(therapy OR treatment OR clinical)",
 }
 
+
+# ================= MEMORY =================
 
 def load_memory():
     if os.path.exists(MEMORY_FILE):
@@ -33,6 +37,8 @@ def save_memory(memory):
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         json.dump(list(memory), f, ensure_ascii=False, indent=2)
 
+
+# ================= TRANSLATE =================
 
 def translate_to_russian(text: str) -> str:
     try:
@@ -50,6 +56,8 @@ def translate_to_russian(text: str) -> str:
     except Exception:
         return text
 
+
+# ================= PUBMED =================
 
 def search_pubmed(query: str):
     params = {
@@ -82,46 +90,33 @@ def fetch_details(pmid: str):
     return title, abstract, link
 
 
+# ================= FORMAT =================
+
 def html_escape(t: str) -> str:
     return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+
 def format_telegram_post(category, title, abstract, link):
-    """
-    Красивый Telegram-пост без обрезки аннотации
-    """
-    return f"""
-{category}
-
-🧠 <b>{title}</b>
-
-📝 <b>Аннотация:</b>
-{abstract}
-
-🔗 <a href="{link}">Читать исследование</a>
-
-#PubMed #EBM
-""".strip()
-
-
-
-def build_message(category: str, title: str, text: str, link: str):
     title = html_escape(title)
-    text = html_escape(text)
+    abstract = html_escape(abstract)
 
-    short_text = text[:1200] + "..." if len(text) > 1200 else text
+    short_text = abstract[:1200] + "..." if len(abstract) > 1200 else abstract
 
     message = (
         f"{category}\n\n"
-        f"<b>{title}</b>\n\n"
-        f"{short_text}"
+        f"🧠 <b>{title}</b>\n\n"
+        f"{short_text}\n\n"
+        f"🔗 <a href='{link}'>Читать полностью на PubMed</a>"
     )
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Читать полностью", url=link)]
+        [InlineKeyboardButton("📖 Открыть статью", url=link)]
     ])
 
     return message, keyboard
 
+
+# ================= MAIN =================
 
 def main():
     print("=== СТАРТ БОТА ===")
@@ -138,6 +133,7 @@ def main():
         pmids = search_pubmed(query)
 
         for pmid in pmids:
+
             if sent_today >= MAX_ARTICLES_PER_DAY:
                 break
 
@@ -149,26 +145,21 @@ def main():
             translated_title = translate_to_russian(title)
             translated_abstract = translate_to_russian(abstract)
 
-           message = format_telegram_post(
-    category,
-    translated_title,
-    translated_abstract,
-    link
-)
+            message, keyboard = format_telegram_post(
+                category,
+                translated_title,
+                translated_abstract,
+                link,
+            )
 
-keyboard = InlineKeyboardMarkup([
-    [InlineKeyboardButton("📖 Читать полностью", url=link)]
-])
-
-try:
-    bot.send_message(
-        chat_id=TELEGRAM_CHAT_ID,
-        text=message,
-        parse_mode="HTML",
-        reply_markup=keyboard,
-        disable_web_page_preview=False,
-    )
-
+            try:
+                bot.send_message(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    text=message,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                )
             except Exception as e:
                 print("Ошибка отправки в Telegram:", e)
                 continue
@@ -183,6 +174,8 @@ try:
     save_memory(memory)
     print(f"✅ Отправлено статей: {sent_today}")
 
+
+# ================= RUN =================
 
 if __name__ == "__main__":
     main()
