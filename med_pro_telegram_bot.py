@@ -14,9 +14,12 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-MAX_ARTICLES_PER_DAY = 6
+MAX_ARTICLES_PER_DAY = 8
+
+# --- новые лимиты ---
 PUBMED_LIMIT = 4
-CYBER_LIMIT = 4
+CYBERLENINKA_LIMIT = 4
+
 MEMORY_FILE = "sent_articles.json"
 
 PUBMED_API = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
