@@ -149,16 +149,26 @@ def main():
             translated_title = translate_to_russian(title)
             translated_abstract = translate_to_russian(abstract)
 
-            message, keyboard = build_message(category, translated_title, translated_abstract, link)
+           message = format_telegram_post(
+    category,
+    translated_title,
+    translated_abstract,
+    link
+)
 
-            try:
-                bot.send_message(
-                    chat_id=TELEGRAM_CHAT_ID,
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=keyboard,
-                    disable_web_page_preview=True,
-                )
+keyboard = InlineKeyboardMarkup([
+    [InlineKeyboardButton("📖 Читать полностью", url=link)]
+])
+
+try:
+    bot.send_message(
+        chat_id=TELEGRAM_CHAT_ID,
+        text=message,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+        disable_web_page_preview=False,
+    )
+
             except Exception as e:
                 print("Ошибка отправки в Telegram:", e)
                 continue
