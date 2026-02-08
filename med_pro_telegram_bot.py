@@ -170,6 +170,66 @@ def format_telegram_post(category, title, abstract, link):
 
 
 # ================= MAIN =================
+from bs4 import BeautifulSoup
+
+
+CYBERLENINKA_URLS = {
+    "🫁 Пульмонология": "https://cyberleninka.ru/search?q=пульмонология",
+    "🌿 Аллергология": "https://cyberleninka.ru/search?q=аллергология",
+    "🩺 Терапия": "https://cyberleninka.ru/search?q=терапия",
+}
+
+
+def parse_cyberleninka(category: str):
+    """
+    Возвращает список статей:
+    [(title, abstract, link), ...]
+    """
+
+    try:
+        url = CYBERLENINKA_URLS.get(category)
+        if not url:
+            return []
+
+        r = requests.get(url, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        articles = []
+
+        items = soup.select(".article-item")
+
+        for item in items[:5]:
+
+            title_tag = item.select_one(".title")
+            link_tag = item.select_one("a")
+
+            if not title_tag or not link_tag:
+                continue
+
+            title = title_tag.get_text(strip=True)
+            link = "https://cyberleninka.ru" + link_tag.get("href")
+
+            # Пытаемся открыть страницу статьи и взять аннотацию
+            abstract = "Аннотация не найдена"
+
+            try:
+                art_page = requests.get(link, timeout=20)
+                art_soup = BeautifulSoup(art_page.text, "html.parser")
+
+                abs_tag = art_soup.select_one(".full.abstract")
+                if abs_tag:
+                    abstract = abs_tag.get_text(strip=True)
+
+            except Exception:
+                pass
+
+            articles.append((title, abstract, link))
+
+        return articles
+
+    except Exception as e:
+        print("Ошибка парсинга КиберЛенинки:", e)
+        return []
 
 def main():
     print("=== СТАРТ БОТА ===")
