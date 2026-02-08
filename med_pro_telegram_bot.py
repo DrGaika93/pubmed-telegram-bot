@@ -258,7 +258,49 @@ def main():
             memory.add(link)
             sent_today += 1
             time.sleep(2)
+# ===== КИБЕРЛЕНИНКА =====
+    print("=== КИБЕРЛЕНИНКА ===")
 
+    for category in TOPICS.keys():
+
+        articles = parse_cyberleninka(category)
+
+        for title, abstract, link in articles:
+
+            if sent_today >= MAX_ARTICLES_PER_DAY:
+                break
+
+            uid = link
+
+            if uid in memory:
+                continue
+
+            translated_title = translate_to_russian(title)
+            translated_abstract = translate_to_russian(abstract)
+
+            message, keyboard = build_message(
+                category,
+                translated_title,
+                translated_abstract,
+                link
+            )
+
+            try:
+                bot.send_message(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    text=message,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                print("Ошибка отправки КиберЛенинки:", e)
+                continue
+
+            memory.add(uid)
+            sent_today += 1
+            time.sleep(2)
+            
     save_memory(memory)
     print(f"✅ Отправлено статей: {sent_today}")
 
