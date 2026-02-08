@@ -1,110 +1,68 @@
-import requests
-import time
-import feedparser
-from datetime import datetime
-
-# ===================== НАСТРОЙКИ =====================
-
 import os
+import requests
+from datetime import datetime
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
-# PubMed RSS по пульмонологии / аллергологии / терапии
-PUBMED_RSS_URLS = [
-    # Астма
-    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=asthma&filter=simsearch1.fha&filter=pubt.meta-analysis&size=50",
+def get_latest_pubmed():
+    """Берём последнюю статью по пульмонологии из PubMed API"""
 
-    # ХОБЛ
-    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=COPD&filter=simsearch1.fha&size=50",
+    search_url = (
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+        "esearch.fcgi?db=pubmed&term=pulmonary+OR+asthma+OR+COPD+OR+allergy"
+        "&sort=pub+date&retmax=1&retmode=json"
+    )
 
-    # Интерстициальные заболевания лёгких
-    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=interstitial+lung+disease&size=50",
+    data = requests.get(search_url, timeout=20).json()
+    ids = data["esearchresult"]["idlist"]
 
-    # Аллергия
-    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=allergy&size=50",
+    if not ids:
+        return None
 
-    # Общая пульмонология
-    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=pulmonary&size=50",
-]
+    pubmed_id = ids[0]
 
-CHECK_INTERVAL_MINUTES = 60  # как часто проверять новые статьи
+    fetch_url = (
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+        f"esummary.fcgi?db=pubmed&id={pubmed_id}&retmode=json"
+    )
 
-# ======================================================
+    summary = requests.get(fetch_url, timeout=20).json()
+    article = summary["result"][pubmed_id]
 
-sent_links = set()
+    title = article.get("title", "Без заголовка")
+    link = f"https://pubmed.ncbi.nlm.nih.gov/{pubmed_id}/"
 
-
-def get_rss_items(url: str):
-    """Получаем статьи из RSS"""
-    feed = feedparser.parse(url)
-    return feed.entries
-
-
-def translate_and_summarize(title: str, summary: str, link: str) -> str:
-    """
-    ПРОСТОЕ текстовое саммари БЕЗ ИИ (полностью бесплатно)
-    """
-
-    text = f"""
-🩺 Новая медицинская статья
-
-<b>{title}</b>
-
-{summary[:800]}...
-
-Источник: {link}
-"""
-
-    return text.strip()
+    return title, link
 
 
 def send_to_telegram(text: str):
-    """Отправка сообщения в Telegram"""
-
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,
-        "parse_mode": "HTML",
         "disable_web_page_preview": False,
     }
 
-    response = requests.post(url, json=payload, timeout=20)
-
-    print("TELEGRAM STATUS:", response.status_code)
-    print("TELEGRAM RESPONSE:", response.text)
+    r = requests.post(url, json=payload, timeout=20)
+    print("Telegram:", r.text)
 
 
-def process_feeds():
-    """Диагностика RSS PubMed"""
+def main():
+    article = get_latest_pubmed()
 
-    for rss_url in PUBMED_RSS_URLS:
-        print("Проверяем RSS:", rss_url)
+    if not article:
+        send_to_telegram("❌ Не удалось получить статью из PubMed")
+        return
 
-        items = get_rss_items(rss_url)
+    title, link = article
 
-        print("Найдено статей:", len(items))
+    text = f"🩺 Новая статья PubMed\n\n{title}\n\nИсточник: {link}"
 
-        if not items:
-            send_to_telegram("❌ RSS пустой. Статей не найдено.")
-            return
-
-        item = items[0]
-
-        title = item.get("title", "Без заголовка")
-        summary = item.get("summary", "")
-        link = item.get("link", "")
-
-        text = translate_and_summarize(title, summary, link)
-
-        send_to_telegram("✅ RSS работает. Отправляю статью:\n\n" + text)
-
+    send_to_telegram(text)
 
 
 if __name__ == "__main__":
-    process_feeds()
-
-
+    main()
