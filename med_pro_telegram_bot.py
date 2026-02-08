@@ -99,25 +99,33 @@ def parse_cyberleninka(query: str, limit: int = 3):
     print(f"Поиск КиберЛенинка: {query}")
 
     url = f"https://cyberleninka.ru/search?q={query}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
 
     try:
         r = requests.get(url, headers=headers, timeout=20)
+
+        if r.status_code != 200:
+            print("КиберЛенинка вернула статус:", r.status_code)
+            return []
+
         soup = BeautifulSoup(r.text, "html.parser")
 
         articles = []
 
-        for item in soup.select(".search-item")[:limit]:
-            title_tag = item.select_one(".title")
-            link_tag = item.select_one("a")
+        # НОВЫЙ селектор (актуальный)
+        for item in soup.select("div.article-item")[:limit]:
 
-            if not title_tag or not link_tag:
+            a_tag = item.select_one("a")
+            title_tag = item.select_one("div.title")
+
+            if not a_tag or not title_tag:
                 continue
 
             title = title_tag.get_text(strip=True)
-            link = "https://cyberleninka.ru" + link_tag["href"]
-
-            summary = "Русскоязычная статья из КиберЛенинки"
+            link = "https://cyberleninka.ru" + a_tag["href"]
+            summary = "Русскоязычная статья (КиберЛенинка)"
 
             articles.append((title, summary, link))
 
@@ -127,7 +135,6 @@ def parse_cyberleninka(query: str, limit: int = 3):
     except Exception as e:
         print("Ошибка КиберЛенинки:", e)
         return []
-
 
 # ================= TELEGRAM MESSAGE =================
 
