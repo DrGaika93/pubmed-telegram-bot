@@ -66,30 +66,29 @@ def send_to_telegram(text: str):
 
 
 def process_feeds():
-    """Берём первую статью из RSS и отправляем в Telegram"""
+    """Диагностика RSS PubMed"""
 
     for rss_url in PUBMED_RSS_URLS:
-        try:
-            items = get_rss_items(rss_url)
+        print("Проверяем RSS:", rss_url)
 
-            if not items:
-                print("RSS пустой:", rss_url)
-                continue
+        items = get_rss_items(rss_url)
 
-            item = items[0]  # ← берём САМУЮ НОВУЮ статью
+        print("Найдено статей:", len(items))
 
-            title = item.get("title", "Без заголовка")
-            summary = item.get("summary", "")
-            link = item.get("link", "")
+        if not items:
+            send_to_telegram("❌ RSS пустой. Статей не найдено.")
+            return
 
-            text = translate_and_summarize(title, summary, link)
+        item = items[0]
 
-            send_to_telegram(text)
+        title = item.get("title", "Без заголовка")
+        summary = item.get("summary", "")
+        link = item.get("link", "")
 
-            print("Статья отправлена:", title)
+        text = translate_and_summarize(title, summary, link)
 
-        except Exception as e:
-            print("Ошибка обработки RSS:", e)
+        send_to_telegram("✅ RSS работает. Отправляю статью:\n\n" + text)
+
 
 
 if __name__ == "__main__":
