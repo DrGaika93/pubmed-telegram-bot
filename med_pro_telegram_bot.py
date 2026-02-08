@@ -156,27 +156,27 @@ def build_message(category: str, title: str, text: str, link: str):
 
 # ================= MAIN =================
 
-def main():
+async def main():
     print("=== СТАРТ БОТА ===")
 
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Нет TELEGRAM_TOKEN или TELEGRAM_CHAT_ID")
+        print("❌ Не заданы TELEGRAM_TOKEN или TELEGRAM_CHAT_ID")
         return
 
     bot = Bot(token=TELEGRAM_TOKEN)
-    memory = load_memory()
 
-    sent_pubmed = 0
+    memory = load_memory()
+    sent_today = 0
     sent_cyber = 0
 
-    # -------- PUBMED --------
+    # ========= PUBMED =========
     print("=== PUBMED ===")
 
     for category, query in TOPICS.items():
         pmids = search_pubmed(query)
 
         for pmid in pmids:
-            if sent_pubmed >= 3:
+            if sent_today >= MAX_ARTICLES_PER_DAY:
                 break
 
             if pmid in memory:
@@ -190,7 +190,7 @@ def main():
             message, keyboard = build_message(category, title, abstract, link)
 
             try:
-                bot.send_message(
+                await bot.send_message(
                     chat_id=TELEGRAM_CHAT_ID,
                     text=message,
                     parse_mode="HTML",
@@ -198,49 +198,60 @@ def main():
                     disable_web_page_preview=True,
                 )
             except Exception as e:
-                print("Ошибка Telegram PubMed:", e)
+                print("Ошибка Telegram:", e)
                 continue
 
             memory.add(pmid)
-            sent_pubmed += 1
+            sent_today += 1
             time.sleep(2)
 
-    # -------- CYBERLENINKA --------
+        if sent_today >= MAX_ARTICLES_PER_DAY:
+            break
+
+    # ========= CYBERLENINKA =========
     print("=== КИБЕРЛЕНИНКА ===")
 
-    for category, query in CYBERLENINKA_TOPICS.items():
-        articles = parse_cyberleninka(query)
+    if sent_today < MAX_ARTICLES_PER_DAY:
+        for category in ["пульмонология", "аллергология", "терапия"]:
 
-        for title, summary, link in articles:
-            if sent_cyber >= 2:
+            articles = parse_cyberleninka(category, limit=3)
+
+            for title, summary, link in articles:
+                if sent_today >= MAX_ARTICLES_PER_DAY:
+                    break
+
+                if link in memory:
+                    continue
+
+                message, keyboard = build_message(category, title, summary, link)
+
+                try:
+                    await bot.send_message(
+                        chat_id=TELEGRAM_CHAT_ID,
+                        text=message,
+                        parse_mode="HTML",
+                        reply_markup=keyboard,
+                        disable_web_page_preview=True,
+                    )
+                except Exception as e:
+                    print("Ошибка Telegram:", e)
+                    continue
+
+                memory.add(link)
+                sent_today += 1
+                sent_cyber += 1
+                time.sleep(2)
+
+            if sent_today >= MAX_ARTICLES_PER_DAY:
                 break
-
-            if link in memory:
-                continue
-
-            message, keyboard = build_message(category, title, summary, link)
-
-            try:
-                bot.send_message(
-                    chat_id=TELEGRAM_CHAT_ID,
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=keyboard,
-                    disable_web_page_preview=True,
-                )
-            except Exception as e:
-                print("Ошибка Telegram КиберЛенинка:", e)
-                continue
-
-            memory.add(link)
-            sent_cyber += 1
-            time.sleep(2)
 
     save_memory(memory)
 
-    print(f"✅ PubMed отправлено: {sent_pubmed}")
+    print(f"✅ PubMed отправлено: {sent_today - sent_cyber}")
     print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
 
 
+
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
