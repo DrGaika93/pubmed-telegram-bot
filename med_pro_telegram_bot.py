@@ -170,67 +170,6 @@ def format_telegram_post(category, title, abstract, link):
 
 
 # ================= MAIN =================
-from bs4 import BeautifulSoup
-
-
-CYBERLENINKA_URLS = {
-    "🫁 Пульмонология": "https://cyberleninka.ru/search?q=пульмонология",
-    "🌿 Аллергология": "https://cyberleninka.ru/search?q=аллергология",
-    "🩺 Терапия": "https://cyberleninka.ru/search?q=терапия",
-}
-
-
-def parse_cyberleninka(category: str):
-    """
-    Возвращает список статей:
-    [(title, abstract, link), ...]
-    """
-
-    try:
-        url = CYBERLENINKA_URLS.get(category)
-        if not url:
-            return []
-
-        r = requests.get(url, timeout=20)
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        articles = []
-
-        items = soup.select(".article-item")
-
-        for item in items[:5]:
-
-            title_tag = item.select_one(".title")
-            link_tag = item.select_one("a")
-
-            if not title_tag or not link_tag:
-                continue
-
-            title = title_tag.get_text(strip=True)
-            link = "https://cyberleninka.ru" + link_tag.get("href")
-
-            # Пытаемся открыть страницу статьи и взять аннотацию
-            abstract = "Аннотация не найдена"
-
-            try:
-                art_page = requests.get(link, timeout=20)
-                art_soup = BeautifulSoup(art_page.text, "html.parser")
-
-                abs_tag = art_soup.select_one(".full.abstract")
-                if abs_tag:
-                    abstract = abs_tag.get_text(strip=True)
-
-            except Exception:
-                pass
-
-            articles.append((title, abstract, link))
-
-        return articles
-
-    except Exception as e:
-        print("Ошибка парсинга КиберЛенинки:", e)
-        return []
-
 def main():
     print("=== СТАРТ БОТА ===")
 
@@ -242,11 +181,13 @@ def main():
     memory = load_memory()
     sent_today = 0
 
+    # ================= PUBMED =================
+    print("=== PUBMED ===")
+
     for category, query in TOPICS.items():
         pmids = search_pubmed(query)
 
         for pmid in pmids:
-
             if sent_today >= MAX_ARTICLES_PER_DAY:
                 break
 
@@ -258,7 +199,7 @@ def main():
             translated_title = translate_to_russian(title)
             translated_abstract = translate_to_russian(abstract)
 
-            message, keyboard = format_telegram_post(
+            message, keyboard = build_message(
                 category,
                 translated_title,
                 translated_abstract,
@@ -274,7 +215,7 @@ def main():
                     disable_web_page_preview=True,
                 )
             except Exception as e:
-                print("Ошибка отправки в Telegram:", e)
+                print("Ошибка отправки PubMed:", e)
                 continue
 
             memory.add(pmid)
@@ -283,24 +224,27 @@ def main():
 
         if sent_today >= MAX_ARTICLES_PER_DAY:
             break
-    # === КИБЕРЛЕНИНКА ===
-    for category, url in CYBERLENINKA_TOPICS.items():
-        articles = parse_cyberleninka(url)
 
-        for title, link in articles:
+    # ================= КИБЕРЛЕНИНКА =================
+    print("=== КИБЕРЛЕНИНКА ===")
+
+    for category in CYBERLENINKA_URLS.keys():
+
+        articles = parse_cyberleninka(category)
+
+        for title, abstract, link in articles:
+
             if sent_today >= MAX_ARTICLES_PER_DAY:
                 break
 
             if link in memory:
                 continue
 
-            abstract = fetch_cyberleninka_text(link)
-
             message, keyboard = build_message(
                 category,
-                title,
+                title,        # уже русский → перевод НЕ нужен
                 abstract,
-                link
+                link,
             )
 
             try:
@@ -318,51 +262,13 @@ def main():
             memory.add(link)
             sent_today += 1
             time.sleep(2)
-# ===== КИБЕРЛЕНИНКА =====
-    print("=== КИБЕРЛЕНИНКА ===")
 
-    for category in TOPICS.keys():
+        if sent_today >= MAX_ARTICLES_PER_DAY:
+            break
 
-        articles = parse_cyberleninka(category)
-
-        for title, abstract, link in articles:
-
-            if sent_today >= MAX_ARTICLES_PER_DAY:
-                break
-
-            uid = link
-
-            if uid in memory:
-                continue
-
-            translated_title = translate_to_russian(title)
-            translated_abstract = translate_to_russian(abstract)
-
-            message, keyboard = build_message(
-                category,
-                translated_title,
-                translated_abstract,
-                link
-            )
-
-            try:
-                bot.send_message(
-                    chat_id=TELEGRAM_CHAT_ID,
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=keyboard,
-                    disable_web_page_preview=True,
-                )
-            except Exception as e:
-                print("Ошибка отправки КиберЛенинки:", e)
-                continue
-
-            memory.add(uid)
-            sent_today += 1
-            time.sleep(2)
-            
     save_memory(memory)
     print(f"✅ Отправлено статей: {sent_today}")
+
 
 
 # ================= RUN =================
