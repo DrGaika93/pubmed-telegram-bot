@@ -13,7 +13,20 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # PubMed RSS по пульмонологии / аллергологии / терапии
 PUBMED_RSS_URLS = [
-    "https://pubmed.ncbi.nlm.nih.gov/rss/search/1k3Jf7.xml",
+    # Астма
+    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=asthma&filter=simsearch1.fha&filter=pubt.meta-analysis&size=50",
+
+    # ХОБЛ
+    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=COPD&filter=simsearch1.fha&size=50",
+
+    # Интерстициальные заболевания лёгких
+    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=interstitial+lung+disease&size=50",
+
+    # Аллергия
+    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=allergy&size=50",
+
+    # Общая пульмонология
+    "https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=pulmonary&size=50",
 ]
 
 CHECK_INTERVAL_MINUTES = 60  # как часто проверять новые статьи
