@@ -6,11 +6,64 @@ import time
 import requests
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
+from bs4 import BeautifulSoup
+
+# === КИБЕРЛЕНИНКА ===
+CYBERLENINKA_TOPICS = {
+    "🫁 Пульмонология": "https://cyberleninka.ru/search?q=пульмонология",
+    "🌿 Аллергология": "https://cyberleninka.ru/search?q=аллергология",
+    "🩺 Терапия": "https://cyberleninka.ru/search?q=терапия",
+}
+
+
+def parse_cyberleninka(search_url: str, limit: int = 5):
+    try:
+        r = requests.get(search_url, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        articles = []
+
+        for item in soup.select(".article-list-item")[:limit]:
+            title_tag = item.select_one(".article-title")
+            link_tag = item.select_one("a")
+
+            if not title_tag or not link_tag:
+                continue
+
+            title = title_tag.get_text(strip=True)
+            link = "https://cyberleninka.ru" + link_tag["href"]
+
+            articles.append((title, link))
+
+        return articles
+
+    except Exception as e:
+        print("Ошибка парсинга КиберЛенинки:", e)
+        return []
+
+
+def fetch_cyberleninka_text(url: str):
+    try:
+        r = requests.get(url, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        abstract = soup.select_one(".full.abstract")
+        if abstract:
+            return abstract.get_text(strip=True)
+
+        paragraphs = soup.select(".ocr p")
+        text = "\n".join(p.get_text(strip=True) for p in paragraphs[:5])
+
+        return text if text else "Нет аннотации."
+
+    except Exception:
+        return "Не удалось получить текст статьи."
+
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-MAX_ARTICLES_PER_DAY = 5
+MAX_ARTICLES_PER_DAY = 7
 MEMORY_FILE = "sent_articles.json"
 
 PUBMED_API = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -170,6 +223,41 @@ def main():
 
         if sent_today >= MAX_ARTICLES_PER_DAY:
             break
+    # === КИБЕРЛЕНИНКА ===
+    for category, url in CYBERLENINKA_TOPICS.items():
+        articles = parse_cyberleninka(url)
+
+        for title, link in articles:
+            if sent_today >= MAX_ARTICLES_PER_DAY:
+                break
+
+            if link in memory:
+                continue
+
+            abstract = fetch_cyberleninka_text(link)
+
+            message, keyboard = build_message(
+                category,
+                title,
+                abstract,
+                link
+            )
+
+            try:
+                bot.send_message(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    text=message,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                print("Ошибка отправки КиберЛенинки:", e)
+                continue
+
+            memory.add(link)
+            sent_today += 1
+            time.sleep(2)
 
     save_memory(memory)
     print(f"✅ Отправлено статей: {sent_today}")
