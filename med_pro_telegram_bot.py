@@ -7,6 +7,27 @@ import feedparser
 from bs4 import BeautifulSoup
 from telegram import Bot, InlineKeyboardMarkup, InlineKeyboardButton
 
+def translate_to_russian(text: str) -> str:
+    """Перевод текста на русский через Google Translate API"""
+    try:
+        url = "https://translate.googleapis.com/translate_a/single"
+        params = {
+            "client": "gtx",
+            "sl": "auto",
+            "tl": "ru",
+            "dt": "t",
+            "q": text,
+        }
+
+        r = requests.get(url, params=params, timeout=20)
+        data = r.json()
+
+        return "".join(part[0] for part in data[0])
+
+    except Exception as e:
+        print("Ошибка перевода:", e)
+        return text
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
