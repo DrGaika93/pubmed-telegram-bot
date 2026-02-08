@@ -1,6 +1,4 @@
 print("=== СТАРТ БОТА ===")
-print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
-# pubmed_telegram_bot.py — PRO+ версия
 
 import os
 import json
@@ -10,15 +8,11 @@ import feedparser
 from bs4 import BeautifulSoup
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
-# ================== НАСТРОЙКИ ==================
-
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 MAX_ARTICLES_PER_DAY = 5
 MEMORY_FILE = "sent_articles.json"
-
-# ---------- RSS источники по рубрикам ----------
 
 SOURCES = {
     "🫁 Пульмонология": [
@@ -32,14 +26,11 @@ SOURCES = {
     ],
 }
 
-# Ключевые слова фильтрации тем
 TOPIC_KEYWORDS = [
     "lung", "pulmonary", "asthma", "copd",
     "allergy", "allergic", "rhinitis",
     "therapy", "treatment", "clinical",
 ]
-
-# =================================================
 
 
 def load_memory():
@@ -55,22 +46,17 @@ def save_memory(memory):
 
 
 def get_full_text(url: str) -> str:
-    """Пытаемся извлечь полный текст статьи"""
     try:
         r = requests.get(url, timeout=15)
         soup = BeautifulSoup(r.text, "html.parser")
-
         paragraphs = soup.find_all("p")
         text = "\n".join(p.get_text(strip=True) for p in paragraphs)
-
         return text[:4000] if text else "Полный текст недоступен."
-
     except Exception:
         return "Не удалось получить полный текст статьи."
 
 
 def translate_to_russian(text: str) -> str:
-    """Бесплатный перевод через Google unofficial API"""
     try:
         url = "https://translate.googleapis.com/translate_a/single"
         params = {
@@ -80,15 +66,11 @@ def translate_to_russian(text: str) -> str:
             "dt": "t",
             "q": text,
         }
-
         r = requests.get(url, params=params, timeout=20)
         data = r.json()
-
-        translated = "".join(part[0] for part in data[0])
-        return translated
-
+        return "".join(part[0] for part in data[0])
     except Exception:
-        return text  # если перевод не удался
+        return text
 
 
 def is_relevant(title: str, summary: str) -> bool:
@@ -97,8 +79,7 @@ def is_relevant(title: str, summary: str) -> bool:
 
 
 def parse_rss(url: str):
-    feed = feedparser.parse(url)
-    return feed.entries
+    return feedparser.parse(url).entries
 
 
 def build_message(category: str, title: str, text: str, link: str):
@@ -120,6 +101,11 @@ def build_message(category: str, title: str, text: str, link: str):
 def main():
     print("=== ВНУТРИ MAIN ===")
 
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("❌ TELEGRAM_TOKEN или TELEGRAM_CHAT_ID пустые")
+        return
+
+    bot = Bot(token=TELEGRAM_TOKEN)
     memory = load_memory()
     sent_today = 0
 
@@ -135,11 +121,13 @@ def main():
                 title = e.get("title", "Без заголовка")
                 summary = e.get("summary", "")
 
-                if link in memory:
+                if not link or link in memory:
                     continue
 
                 if not is_relevant(title, summary):
                     continue
+
+                print("Отправляем статью:", title)
 
                 full_text = get_full_text(link)
                 translated = translate_to_russian(full_text)
@@ -162,9 +150,8 @@ def main():
                 break
 
     save_memory(memory)
+    print(f"✅ Отправлено статей: {sent_today}")
 
 
 if __name__ == "__main__":
     main()
-
-
