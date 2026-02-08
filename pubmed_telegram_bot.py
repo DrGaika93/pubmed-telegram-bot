@@ -1,86 +1,104 @@
 import os
+import time
 import requests
+from bs4 import BeautifulSoup
+
+# ===================== НАСТРОЙКИ =====================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+# Русские медицинские журналы (страницы последних публикаций)
+SOURCES = [
+    {
+        "name": "Пульмонология",
+        "url": "https://journal.pulmonology.ru/pulm/issue/current",
+    },
+    {
+        "name": "Russian Journal of Allergy",
+        "url": "https://rusalljournal.ru/raj/issue/current",
+    },
+]
 
-def translate_to_russian(text: str) -> str:
-    """Бесплатный перевод через LibreTranslate"""
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-    url = "https://libretranslate.de/translate"
-
-    payload = {
-        "q": text,
-        "source": "en",
-        "target": "ru",
-        "format": "text",
-    }
-
-    try:
-        r = requests.post(url, data=payload, timeout=20)
-        return r.json()["translatedText"]
-    except Exception:
-        return text  # если перевод не сработал — отправим оригинал
-
-
-def get_latest_pubmed():
-    """Получаем последнюю статью PubMed"""
-
-    search_url = (
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
-        "esearch.fcgi?db=pubmed&term=pulmonary+OR+asthma+OR+COPD+OR+allergy"
-        "&sort=pub+date&retmax=1&retmode=json"
-    )
-
-    data = requests.get(search_url, timeout=20).json()
-    ids = data["esearchresult"]["idlist"]
-
-    if not ids:
-        return None
-
-    pubmed_id = ids[0]
-
-    fetch_url = (
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
-        f"esummary.fcgi?db=pubmed&id={pubmed_id}&retmode=json"
-    )
-
-    summary = requests.get(fetch_url, timeout=20).json()
-    article = summary["result"][pubmed_id]
-
-    title_en = article.get("title", "No title")
-    link = f"https://pubmed.ncbi.nlm.nih.gov/{pubmed_id}/"
-
-    title_ru = translate_to_russian(title_en)
-
-    return title_ru, link
+# ======================================================
 
 
 def send_to_telegram(text: str):
+    """Отправка сообщения в Telegram"""
+
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,
+        "parse_mode": "HTML",
         "disable_web_page_preview": False,
     }
 
-    requests.post(url, json=payload, timeout=20)
+    r = requests.post(url, json=payload, timeout=20)
+    print("Telegram:", r.text)
+
+
+
+def get_latest_article_from_source(source):
+    """Парсим страницу журнала и берём первую статью"""
+
+    try:
+        r = requests.get(source["url"], headers=HEADERS, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        # Ищем первую ссылку на статью
+        article_link = soup.find("a", href=True)
+
+        if not article_link:
+            return None
+
+        title = article_link.get_text(strip=True)
+        link = article_link["href"]
+
+        # Если ссылка относительная — делаем абсолютную
+        if link.startswith("/"):
+            base = source["url"].split("/", 3)[:3]
+            base_url = "/".join(base)
+            link = base_url + link
+
+        return title, link, source["name"]
+
+    except Exception as e:
+        print("Ошибка парсинга", source["name"], e)
+        return None
+
 
 
 def main():
-    article = get_latest_pubmed()
+    """Получаем по одной статье из каждого журнала"""
 
-    if not article:
-        send_to_telegram("❌ Не удалось получить статью PubMed")
-        return
+    sent_any = False
 
-    title, link = article
+    for source in SOURCES:
+        article = get_latest_article_from_source(source)
 
-    text = f"🩺 Новая статья PubMed\n\n{title}\n\nИсточник: {link}"
+        if not article:
+            continue
 
-    send_to_telegram(text)
+        title, link, source_name = article
+
+        text = (
+            f"🩺 <b>Новая статья</b>\n\n"
+            f"<b>{title}</b>\n\n"
+            f"Источник: {source_name}\n"
+            f"{link}"
+        )
+
+        send_to_telegram(text)
+        sent_any = True
+
+        time.sleep(2)
+
+    if not sent_any:
+        send_to_telegram("❌ Не удалось найти новые статьи в русских журналах")
 
 
 if __name__ == "__main__":
