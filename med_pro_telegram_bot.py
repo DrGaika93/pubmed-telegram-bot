@@ -85,6 +85,24 @@ def fetch_details(pmid: str):
 def html_escape(t: str) -> str:
     return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+def format_telegram_post(category, title, abstract, link):
+    """
+    Красивый Telegram-пост без обрезки аннотации
+    """
+    return f"""
+{category}
+
+🧠 <b>{title}</b>
+
+📝 <b>Аннотация:</b>
+{abstract}
+
+🔗 <a href="{link}">Читать исследование</a>
+
+#PubMed #EBM
+""".strip()
+
+
 
 def build_message(category: str, title: str, text: str, link: str):
     title = html_escape(title)
