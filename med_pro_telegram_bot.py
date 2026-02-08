@@ -1,16 +1,19 @@
 print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
-import feedparser
+
 import os
 import json
 import time
 import requests
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from bs4 import BeautifulSoup
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+
+# ================= НАСТРОЙКИ =================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 MAX_ARTICLES_PER_DAY = 5
+CYBERLENINKA_LIMIT = 2
 MEMORY_FILE = "sent_articles.json"
 
 PUBMED_API = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -22,17 +25,13 @@ TOPICS = {
     "🩺 Терапия": "(therapy OR treatment OR clinical)",
 }
 
-CYBERLENINKA_RSS = {
-    "🫁 Пульмонология": "https://cyberleninka.ru/rss/pulmonologiya",
-    "🌿 Аллергология": "https://cyberleninka.ru/rss/allergologiya",
-    "🩺 Терапия": "https://cyberleninka.ru/rss/terapiya",
+CYBERLENINKA_QUERIES = {
+    "🫁 Пульмонология": "пульмонология",
+    "🌿 Аллергология": "аллергия",
+    "🩺 Терапия": "терапия",
 }
 
-CYBERLENINKA_LIMIT = 2
-
-
-
-# ================= MEMORY =================
+# ================= ПАМЯТЬ =================
 
 def load_memory():
     if os.path.exists(MEMORY_FILE):
@@ -46,7 +45,7 @@ def save_memory(memory):
         json.dump(list(memory), f, ensure_ascii=False, indent=2)
 
 
-# ================= TRANSLATE =================
+# ================= ПЕРЕВОД =================
 
 def translate_to_russian(text: str) -> str:
     try:
@@ -88,86 +87,90 @@ def fetch_pubmed_details(pmid: str):
     title = soup.find("articletitle")
     abstract = soup.find("abstracttext")
 
-    title = title.get_text(strip=True) if title else "Без заголовка"
-    abstract = abstract.get_text(strip=True) if abstract else "Нет аннотации"
+    title = title.text if title else "Без заголовка"
+    abstract = abstract.text if abstract else "Нет аннотации"
 
     link = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
 
     return title, abstract, link
 
 
-# ================= CYBERLENINKA =================
+# ================= КИБЕРЛЕНИНКА =================
 
-def parse_cyberleninka_rss(category: str, url: str):
-    print(f"RSS КиберЛенинка: {category}")
+def parse_cyberleninka(query: str, limit: int):
+    print(f"Поиск КиберЛенинка: {query}")
+
+    url = f"https://cyberleninka.ru/search?q={query}"
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
-        feed = feedparser.parse(url)
+        r = requests.get(url, headers=headers, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
+
         articles = []
 
-        for entry in feed.entries[:CYBERLENINKA_LIMIT]:
-            title = entry.title
-            link = entry.link
-            summary = entry.summary if "summary" in entry else "Русскоязычная статья"
+        for item in soup.select(".search-item")[:limit]:
+            title_tag = item.select_one(".title")
+            link_tag = item.select_one("a")
+
+            if not title_tag or not link_tag:
+                continue
+
+            title = title_tag.get_text(strip=True)
+            link = "https://cyberleninka.ru" + link_tag["href"]
+
+            summary = "Русскоязычная статья из КиберЛенинки"
 
             articles.append((title, summary, link))
 
-        print(f"Найдено RSS-статей: {len(articles)}")
+        print(f"Найдено в КиберЛенинке: {len(articles)}")
         return articles
 
     except Exception as e:
-        print("Ошибка RSS КиберЛенинки:", e)
+        print("Ошибка КиберЛенинки:", e)
         return []
 
 
-# ================= TELEGRAM MESSAGE =================
-
-def html_escape(t: str) -> str:
-    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
+# ================= TELEGRAM =================
 
 def build_message(category: str, title: str, text: str, link: str):
-    title = html_escape(title)
-    text = html_escape(text)
-
-    short_text = text[:1000] + "..." if len(text) > 1000 else text
-
     message = (
         f"{category}\n\n"
         f"<b>{title}</b>\n\n"
-        f"{short_text}"
+        f"{text[:1000]}...\n\n"
+        f"<a href='{link}'>Читать полностью</a>"
     )
 
-    keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Читать полностью", url=link)]]
-    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Открыть статью", url=link)]
+    ])
 
     return message, keyboard
 
 
 # ================= MAIN =================
 
-async def main():
+def main():
     print("=== СТАРТ БОТА ===")
 
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Не заданы TELEGRAM_TOKEN или TELEGRAM_CHAT_ID")
+        print("❌ Нет TELEGRAM_TOKEN или TELEGRAM_CHAT_ID")
         return
 
     bot = Bot(token=TELEGRAM_TOKEN)
-
     memory = load_memory()
-    sent_today = 0
+
+    sent_pubmed = 0
     sent_cyber = 0
 
-    # ========= PUBMED =========
+    # -------- PUBMED --------
     print("=== PUBMED ===")
 
     for category, query in TOPICS.items():
         pmids = search_pubmed(query)
 
         for pmid in pmids:
-            if sent_today >= MAX_ARTICLES_PER_DAY:
+            if sent_pubmed >= MAX_ARTICLES_PER_DAY:
                 break
 
             if pmid in memory:
@@ -181,7 +184,7 @@ async def main():
             message, keyboard = build_message(category, title, abstract, link)
 
             try:
-                await bot.send_message(
+                bot.send_message(
                     chat_id=TELEGRAM_CHAT_ID,
                     text=message,
                     parse_mode="HTML",
@@ -189,29 +192,24 @@ async def main():
                     disable_web_page_preview=True,
                 )
             except Exception as e:
-                print("Ошибка Telegram:", e)
+                print("Ошибка Telegram PubMed:", e)
                 continue
 
             memory.add(pmid)
-            sent_today += 1
+            sent_pubmed += 1
             time.sleep(2)
 
-        if sent_today >= MAX_ARTICLES_PER_DAY:
+    # -------- КИБЕРЛЕНИНКА --------
+    print("=== КИБЕРЛЕНИНКА ===")
+
+    for category, query in CYBERLENINKA_QUERIES.items():
+        if sent_cyber >= CYBERLENINKA_LIMIT:
             break
 
-    # ========= CYBERLENINKA =========
-   print("=== КИБЕРЛЕНИНКА ===")
-
-sent_cyber = 0
-
-if sent_today < MAX_ARTICLES_PER_DAY:
-    for category, rss_url in CYBERLENINKA_RSS.items():
-
-        articles = parse_cyberleninka_rss(category, rss_url)
+        articles = parse_cyberleninka(query, CYBERLENINKA_LIMIT)
 
         for title, summary, link in articles:
-
-            if sent_today >= MAX_ARTICLES_PER_DAY:
+            if sent_cyber >= CYBERLENINKA_LIMIT:
                 break
 
             if link in memory:
@@ -228,21 +226,18 @@ if sent_today < MAX_ARTICLES_PER_DAY:
                     disable_web_page_preview=True,
                 )
             except Exception as e:
-                print("Ошибка Telegram:", e)
+                print("Ошибка Telegram CyberLeninka:", e)
                 continue
 
             memory.add(link)
-            sent_today += 1
             sent_cyber += 1
             time.sleep(2)
 
-        if sent_today >= MAX_ARTICLES_PER_DAY:
-            break
+    save_memory(memory)
 
-print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
-
+    print(f"✅ PubMed отправлено: {sent_pubmed}")
+    print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
 
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    main()
