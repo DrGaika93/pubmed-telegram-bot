@@ -13,10 +13,12 @@ SOURCES = [
     {
         "name": "Пульмонология",
         "url": "https://journal.pulmonology.ru/pulm/issue/current",
+        "article_selector": "div.title a",
     },
     {
         "name": "Russian Journal of Allergy",
         "url": "https://rusalljournal.ru/raj/issue/current",
+        "article_selector": "div.title a",
     },
 ]
 
@@ -43,22 +45,27 @@ def send_to_telegram(text: str):
 
 
 def get_latest_article_from_source(source):
-    """Парсим страницу журнала и берём первую статью"""
+    """Парсим страницу журнала и берём первую реальную статью"""
 
     try:
         r = requests.get(source["url"], headers=HEADERS, timeout=20)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # Ищем первую ссылку на статью
-        article_link = soup.find("a", href=True)
+        # ищем ссылки именно на статьи по CSS‑селектору
+        links = soup.select(source["article_selector"])
 
-        if not article_link:
+        if not links:
             return None
 
-        title = article_link.get_text(strip=True)
-        link = article_link["href"]
+        article_link = links[0]
 
-        # Если ссылка относительная — делаем абсолютную
+        title = article_link.get_text(strip=True)
+        link = article_link.get("href")
+
+        if not title or not link:
+            return None
+
+        # если ссылка относительная — делаем абсолютную
         if link.startswith("/"):
             base = source["url"].split("/", 3)[:3]
             base_url = "/".join(base)
