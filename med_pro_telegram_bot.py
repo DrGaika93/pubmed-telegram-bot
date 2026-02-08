@@ -14,7 +14,9 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-MAX_ARTICLES_PER_DAY = 5
+MAX_ARTICLES_PER_DAY = 6
+PUBMED_LIMIT = 4
+CYBER_LIMIT = 4
 MEMORY_FILE = "sent_articles.json"
 
 PUBMED_API = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -156,20 +158,26 @@ import time
 from telegram import Bot
 
 async def main():
+    print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
     print("=== СТАРТ БОТА ===")
 
     bot = Bot(token=TELEGRAM_TOKEN)
     memory = load_memory()
-    sent_today = 0
+
+    sent_pubmed = 0
+    sent_cyber = 0
 
     # -------- PUBMED --------
     print("=== PUBMED ===")
 
     for category, query in TOPICS.items():
+        if sent_pubmed >= PUBMED_LIMIT:
+            break
+
         pmids = search_pubmed(query)
 
         for pmid in pmids:
-            if sent_today >= MAX_ARTICLES_PER_DAY:
+            if sent_pubmed >= PUBMED_LIMIT:
                 break
 
             if pmid in memory:
@@ -191,53 +199,51 @@ async def main():
                     disable_web_page_preview=True,
                 )
             except Exception as e:
-                print("Ошибка Telegram:", e)
+                print("Ошибка Telegram (PubMed):", e)
                 continue
 
             memory.add(pmid)
-            sent_today += 1
+            sent_pubmed += 1
             await asyncio.sleep(2)
-
-        if sent_today >= MAX_ARTICLES_PER_DAY:
-            break
 
     # -------- CYBERLENINKA --------
     print("=== КИБЕРЛЕНИНКА ===")
 
-    if sent_today < MAX_ARTICLES_PER_DAY:
-        for category, rss in CYBERLENINKA_RSS.items():
-            articles = parse_cyberleninka(category, rss)
+    for category, rss in CYBERLENINKA_RSS.items():
+        if sent_cyber >= CYBERLENINKA_LIMIT:
+            break
 
-            for _, title, summary, link in articles:
-                if sent_today >= MAX_ARTICLES_PER_DAY:
-                    break
+        articles = parse_cyberleninka(category, rss)
 
-                if link in memory:
-                    continue
-
-                message, keyboard = build_message(category, title, summary, link)
-
-                try:
-                    await bot.send_message(
-                        chat_id=TELEGRAM_CHAT_ID,
-                        text=message,
-                        parse_mode="HTML",
-                        reply_markup=keyboard,
-                        disable_web_page_preview=True,
-                    )
-                except Exception as e:
-                    print("Ошибка Telegram:", e)
-                    continue
-
-                memory.add(link)
-                sent_today += 1
-                await asyncio.sleep(2)
-
-            if sent_today >= MAX_ARTICLES_PER_DAY:
+        for _, title, summary, link in articles:
+            if sent_cyber >= CYBERLENINKA_LIMIT:
                 break
 
+            if link in memory:
+                continue
+
+            message, keyboard = build_message(category, title, summary, link)
+
+            try:
+                await bot.send_message(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    text=message,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                print("Ошибка Telegram (CyberLeninka):", e)
+                continue
+
+            memory.add(link)
+            sent_cyber += 1
+            await asyncio.sleep(2)
+
     save_memory(memory)
-    print(f"✅ Отправлено статей: {sent_today}")
+
+    print(f"✅ PubMed отправлено: {sent_pubmed}")
+    print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
 
 
 if __name__ == "__main__":
