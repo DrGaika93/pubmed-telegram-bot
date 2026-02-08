@@ -1,13 +1,11 @@
 print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
-# med_pro_telegram_bot.py — FINAL FIXED VERSION
+# med_pro_telegram_bot.py — FINAL STABLE VERSION
 
 import os
 import json
 import time
 import requests
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
-
-# ================== НАСТРОЙКИ ==================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -21,10 +19,8 @@ PUBMED_FETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 TOPICS = {
     "🫁 Пульмонология": "(asthma OR COPD OR pulmonary OR lung)",
     "🌿 Аллергология": "(allergy OR allergic OR rhinitis)",
-    "🩺 Терапия": "(therapy OR treatment OR clinical)"
+    "🩺 Терапия": "(therapy OR treatment OR clinical)",
 }
-
-# =================================================
 
 
 def load_memory():
@@ -65,37 +61,30 @@ def search_pubmed(query: str):
         "retmode": "json",
     }
     r = requests.get(PUBMED_API, params=params, timeout=20)
-    return r.json()["esearchresult"]["idlist"]
+    return r.json().get("esearchresult", {}).get("idlist", [])
 
 
 def fetch_details(pmid: str):
-    params = {
-        "db": "pubmed",
-        "id": pmid,
-        "retmode": "xml",
-    }
+    params = {"db": "pubmed", "id": pmid, "retmode": "xml"}
     r = requests.get(PUBMED_FETCH, params=params, timeout=20)
     text = r.text
 
-    title_start = text.find("<ArticleTitle>")
-    title_end = text.find("</ArticleTitle>")
-    abstract_start = text.find("<AbstractText>")
-    abstract_end = text.find("</AbstractText>")
+    def extract(tag):
+        start = text.find(f"<{tag}>")
+        end = text.find(f"</{tag}>")
+        if start != -1 and end != -1:
+            return text[start + len(tag) + 2 : end]
+        return ""
 
-    title = text[title_start + 14:title_end] if title_start != -1 else "Без заголовка"
-    abstract = text[abstract_start + 14:abstract_end] if abstract_start != -1 else "Нет аннотации"
-
+    title = extract("ArticleTitle") or "Без заголовка"
+    abstract = extract("AbstractText") or "Нет аннотации"
     link = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
 
     return title, abstract, link
 
 
-def html_escape(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+def html_escape(t: str) -> str:
+    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def build_message(category: str, title: str, text: str, link: str):
@@ -105,12 +94,8 @@ def build_message(category: str, title: str, text: str, link: str):
     short_text = text[:1200] + "..." if len(text) > 1200 else text
 
     message = (
-        f"{category}
-
-"
-        f"<b>{title}</b>
-
-"
+        f"{category}\n\n"
+        f"<b>{title}</b>\n\n"
         f"{short_text}"
     )
 
@@ -143,12 +128,7 @@ def main():
             translated_title = translate_to_russian(title)
             translated_abstract = translate_to_russian(abstract)
 
-            message, keyboard = build_message(
-                category,
-                translated_title,
-                translated_abstract,
-                link,
-            )
+            message, keyboard = build_message(category, translated_title, translated_abstract, link)
 
             bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
@@ -166,9 +146,8 @@ def main():
             break
 
     save_memory(memory)
-
     print(f"✅ Отправлено статей: {sent_today}")
 
 
 if __name__ == "__main__":
-    main()
+    m
