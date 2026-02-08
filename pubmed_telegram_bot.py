@@ -74,8 +74,7 @@ def translate_to_russian(text: str) -> str:
 
 
 def is_relevant(title: str, summary: str) -> bool:
-    text = f"{title} {summary}".lower()
-    return any(word in text for word in TOPIC_KEYWORDS)
+    return True
 
 
 def parse_rss(url: str):
