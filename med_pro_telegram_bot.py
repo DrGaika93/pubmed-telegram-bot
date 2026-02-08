@@ -1,13 +1,13 @@
-# MED‑PRO Telegram Bot — стабильная версия через PubMed API + русские источники
+print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
+# med_pro_telegram_bot.py — FINAL FIXED VERSION
 
 import os
 import json
 import time
 import requests
-from datetime import datetime
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
-# ================= НАСТРОЙКИ =================
+# ================== НАСТРОЙКИ ==================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -15,18 +15,16 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 MAX_ARTICLES_PER_DAY = 5
 MEMORY_FILE = "sent_articles.json"
 
-# Поисковые запросы PubMed (стабильные, не RSS)
-PUBMED_QUERIES = {
-    "🫁 Пульмонология": "pulmonary OR lung OR COPD OR asthma",
-    "🌿 Аллергология": "allergy OR allergic OR rhinitis",
-    "🩺 Терапия": "clinical treatment OR internal medicine",
+PUBMED_API = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+PUBMED_FETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+
+TOPICS = {
+    "🫁 Пульмонология": "(asthma OR COPD OR pulmonary OR lung)",
+    "🌿 Аллергология": "(allergy OR allergic OR rhinitis)",
+    "🩺 Терапия": "(therapy OR treatment OR clinical)"
 }
 
-# PubMed API
-PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-PUBMED_FETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-
-# ==============================================
+# =================================================
 
 
 def load_memory():
@@ -41,52 +39,7 @@ def save_memory(memory):
         json.dump(list(memory), f, ensure_ascii=False, indent=2)
 
 
-def pubmed_search(query):
-    """Получаем список ID статей за последние 7 дней"""
-    params = {
-        "db": "pubmed",
-        "term": query,
-        "retmax": 10,
-        "retmode": "json",
-        "reldate": 7,
-        "datetype": "pdat",
-    }
-
-    r = requests.get(PUBMED_SEARCH_URL, params=params, timeout=20)
-    data = r.json()
-
-    return data.get("esearchresult", {}).get("idlist", [])
-
-
-def pubmed_fetch(pmid):
-    """Получаем заголовок, аннотацию и ссылку"""
-    params = {
-        "db": "pubmed",
-        "id": pmid,
-        "retmode": "xml",
-    }
-
-    r = requests.get(PUBMED_FETCH_URL, params=params, timeout=20)
-    text = r.text
-
-    # очень простой парсинг без внешних библиотек
-    def extract(tag):
-        start = text.find(f"<{tag}>")
-        end = text.find(f"</{tag}>")
-        if start == -1 or end == -1:
-            return ""
-        return text[start + len(tag) + 2 : end]
-
-    title = extract("ArticleTitle") or "Без заголовка"
-    abstract = extract("AbstractText") or "Аннотация отсутствует."
-
-    link = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
-
-    return title, abstract, link
-
-
 def translate_to_russian(text: str) -> str:
-    """Бесплатный перевод"""
     try:
         url = "https://translate.googleapis.com/translate_a/single"
         params = {
@@ -94,40 +47,74 @@ def translate_to_russian(text: str) -> str:
             "sl": "auto",
             "tl": "ru",
             "dt": "t",
-            "q": text[:4000],
+            "q": text,
         }
-
         r = requests.get(url, params=params, timeout=20)
         data = r.json()
-
         return "".join(part[0] for part in data[0])
-
     except Exception:
         return text
+
+
+def search_pubmed(query: str):
+    params = {
+        "db": "pubmed",
+        "term": query,
+        "retmax": 10,
+        "sort": "pub date",
+        "retmode": "json",
+    }
+    r = requests.get(PUBMED_API, params=params, timeout=20)
+    return r.json()["esearchresult"]["idlist"]
+
+
+def fetch_details(pmid: str):
+    params = {
+        "db": "pubmed",
+        "id": pmid,
+        "retmode": "xml",
+    }
+    r = requests.get(PUBMED_FETCH, params=params, timeout=20)
+    text = r.text
+
+    title_start = text.find("<ArticleTitle>")
+    title_end = text.find("</ArticleTitle>")
+    abstract_start = text.find("<AbstractText>")
+    abstract_end = text.find("</AbstractText>")
+
+    title = text[title_start + 14:title_end] if title_start != -1 else "Без заголовка"
+    abstract = text[abstract_start + 14:abstract_end] if abstract_start != -1 else "Нет аннотации"
+
+    link = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+
+    return title, abstract, link
 
 
 def build_message(category: str, title: str, text: str, link: str):
     short_text = text[:1200] + "..." if len(text) > 1200 else text
 
-    message = f"{category}\n\n<b>{title}</b>\n\n{short_text}"
-
-    keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Читать полностью", url=link)]]
+    message = (
+        f"{category}\n\n"
+        f"<b>{title}</b>\n\n"
+        f"{short_text}"
     )
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Читать полностью", url=link)]
+    ])
 
     return message, keyboard
 
 
 def main():
-    print("=== MED‑PRO БОТ ЗАПУЩЕН ===")
+    print("=== СТАРТ БОТА ===")
 
     bot = Bot(token=TELEGRAM_TOKEN)
     memory = load_memory()
-
     sent_today = 0
 
-    for category, query in PUBMED_QUERIES.items():
-        pmids = pubmed_search(query)
+    for category, query in TOPICS.items():
+        pmids = search_pubmed(query)
 
         for pmid in pmids:
             if sent_today >= MAX_ARTICLES_PER_DAY:
@@ -136,10 +123,17 @@ def main():
             if pmid in memory:
                 continue
 
-            title, abstract, link = pubmed_fetch(pmid)
+            title, abstract, link = fetch_details(pmid)
 
             translated_title = translate_to_russian(title)
-            translated_abstract, link)
+            translated_abstract = translate_to_russian(abstract)
+
+            message, keyboard = build_message(
+                category,
+                translated_title,
+                translated_abstract,
+                link,
+            )
 
             bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
