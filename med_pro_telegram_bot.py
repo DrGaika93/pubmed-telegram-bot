@@ -151,12 +151,12 @@ def parse_cyberleninka(category: str, url: str):
 
 # ================= MAIN =================
 
-def main():
-    print("=== СТАРТ БОТА ===")
+import asyncio
+import time
+from telegram import Bot
 
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Не заданы TELEGRAM_TOKEN или TELEGRAM_CHAT_ID")
-        return
+async def main():
+    print("=== СТАРТ БОТА ===")
 
     bot = Bot(token=TELEGRAM_TOKEN)
     memory = load_memory()
@@ -183,7 +183,7 @@ def main():
             message, keyboard = build_message(category, title, abstract, link)
 
             try:
-                bot.send_message(
+                await bot.send_message(
                     chat_id=TELEGRAM_CHAT_ID,
                     text=message,
                     parse_mode="HTML",
@@ -196,7 +196,7 @@ def main():
 
             memory.add(pmid)
             sent_today += 1
-            time.sleep(2)
+            await asyncio.sleep(2)
 
         if sent_today >= MAX_ARTICLES_PER_DAY:
             break
@@ -218,7 +218,7 @@ def main():
                 message, keyboard = build_message(category, title, summary, link)
 
                 try:
-                    bot.send_message(
+                    await bot.send_message(
                         chat_id=TELEGRAM_CHAT_ID,
                         text=message,
                         parse_mode="HTML",
@@ -231,7 +231,7 @@ def main():
 
                 memory.add(link)
                 sent_today += 1
-                time.sleep(2)
+                await asyncio.sleep(2)
 
             if sent_today >= MAX_ARTICLES_PER_DAY:
                 break
@@ -241,4 +241,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
+
