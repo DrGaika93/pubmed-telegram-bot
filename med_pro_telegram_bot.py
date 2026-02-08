@@ -97,33 +97,41 @@ def fetch_details(pmid: str):
 
 # ================= CYBERLENINKA =================
 
-def parse_cyberleninka(category, url):
-    print(f"Проверяем КиберЛенинку: {category}")
-
-    articles = []
-
+def parse_cyberleninka(category: str, url: str):
+    """Получаем статьи с КиберЛенинки"""
     try:
-        r = requests.get(url, timeout=20)
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        r = requests.get(url, headers=headers, timeout=20)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        items = soup.select(".article-item")
+        articles = []
+
+        items = soup.select("div.article-item")
 
         for item in items[:5]:
-            title_tag = item.select_one(".title")
-            link_tag = item.select_one("a")
+            title_tag = item.select_one("a.article-item-title")
+            abstract_tag = item.select_one("div.article-item-annotation")
 
-            if not title_tag or not link_tag:
+            if not title_tag:
                 continue
 
             title = title_tag.get_text(strip=True)
-            link = "https://cyberleninka.ru" + link_tag["href"]
+            link = "https://cyberleninka.ru" + title_tag.get("href")
+            abstract = (
+                abstract_tag.get_text(strip=True)
+                if abstract_tag else "Аннотация отсутствует"
+            )
 
-            articles.append((title, "Русскоязычная статья из КиберЛенинки.", link))
+            articles.append((title, abstract, link))
+
+        return articles
 
     except Exception as e:
         print("Ошибка парсинга КиберЛенинки:", e)
-
-    return articles
+        return []
 
 
 # ================= TELEGRAM MESSAGE =================
