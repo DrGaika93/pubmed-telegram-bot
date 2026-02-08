@@ -98,6 +98,39 @@ def build_message(category, title, abstract, link):
 
     return message, keyboard
 
+def parse_cyberleninka(query: str, limit: int = 3):
+    print(f"Поиск КиберЛенинка: {query}")
+
+    url = f"https://cyberleninka.ru/search?q={query}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    try:
+        r = requests.get(url, headers=headers, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        articles = []
+
+        for item in soup.select(".search-item")[:limit]:
+            title_tag = item.select_one(".title")
+            link_tag = item.select_one("a")
+
+            if not title_tag or not link_tag:
+                continue
+
+            title = title_tag.get_text(strip=True)
+            link = "https://cyberleninka.ru" + link_tag["href"]
+
+            summary = "Русскоязычная статья из КиберЛенинки"
+
+            articles.append((title, summary, link))
+
+        print(f"Найдено в КиберЛенинке: {len(articles)}")
+        return articles
+
+    except Exception as e:
+        print("Ошибка КиберЛенинки:", e)
+        return []
+
 
 # ================= MAIN =================
 
@@ -148,47 +181,49 @@ async def main():
     # -------- CYBERLENINKA --------
     print("=== КИБЕРЛЕНИНКА ===")
 
-    sent_cyber = 0
+CYBER_QUERIES = [
+    "пульмонология",
+    "аллергология",
+    "терапия",
+]
 
-    if sent_today < MAX_ARTICLES_PER_DAY:
-        for category, rss in CYBERLENINKA_RSS.items():
-            articles = parse_cyberleninka(category, rss)
+sent_cyber = 0
+CYBERLENINKA_LIMIT = 3
 
-            for _, title, summary, link in articles:
-                if sent_today >= MAX_ARTICLES_PER_DAY:
-                    break
+if sent_today < MAX_ARTICLES_PER_DAY:
+    for query in CYBER_QUERIES:
+        articles = parse_cyberleninka(query, limit=CYBERLENINKA_LIMIT)
 
-                if link in memory:
-                    continue
-
-                message, keyboard = build_message(category, title, summary, link)
-
-                try:
-                    await bot.send_message(
-                        chat_id=TELEGRAM_CHAT_ID,
-                        text=message,
-                        parse_mode="HTML",
-                        reply_markup=keyboard,
-                        disable_web_page_preview=True,
-                    )
-                except Exception as e:
-                    print("Ошибка Telegram:", e)
-                    continue
-
-                memory.add(link)
-                sent_today += 1
-                sent_cyber += 1
-                await asyncio.sleep(2)
-
-                if sent_cyber >= CYBERLENINKA_LIMIT:
-                    break
-
+        for title, summary, link in articles:
             if sent_today >= MAX_ARTICLES_PER_DAY:
                 break
 
-    save_memory(memory)
+            if link in memory:
+                continue
 
-    print(f"✅ Всего отправлено: {sent_today}")
+            message, keyboard = build_message("🇷🇺 КиберЛенинка", title, summary, link)
+
+            try:
+                await bot.send_message(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    text=message,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                print("Ошибка Telegram:", e)
+                continue
+
+            memory.add(link)
+            sent_today += 1
+            sent_cyber += 1
+            time.sleep(2)
+
+        if sent_today >= MAX_ARTICLES_PER_DAY:
+            break
+
+print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
 
 
 # ================= RUN =================
