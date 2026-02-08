@@ -5,8 +5,11 @@ from datetime import datetime
 
 # ===================== НАСТРОЙКИ =====================
 
-TELEGRAM_TOKEN = "PASTE_YOUR_TELEGRAM_BOT_TOKEN_HERE"
-TELEGRAM_CHAT_ID = "@your_channel_username"
+import os
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 
 # PubMed RSS по пульмонологии / аллергологии / терапии
 PUBMED_RSS_URLS = [
