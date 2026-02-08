@@ -35,7 +35,7 @@ def search_pubmed():
 
     params = {
         "db": "pubmed",
-        "term": "russian[lang]",
+        "term": "english[lang]",
         "reldate": 1,
         "datetype": "pdat",
         "retmax": 20,
