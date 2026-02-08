@@ -1,3 +1,4 @@
+print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
 # pubmed_telegram_bot.py — PRO+ версия
 
 import os
