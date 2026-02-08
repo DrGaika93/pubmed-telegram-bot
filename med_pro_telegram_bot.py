@@ -1,5 +1,5 @@
 print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
-# med_pro_telegram_bot.py — FINAL STABLE VERSION
+# med_pro_telegram_bot.py — FINAL ABSOLUTE STABLE VERSION
 
 import os
 import json
@@ -109,6 +109,10 @@ def build_message(category: str, title: str, text: str, link: str):
 def main():
     print("=== СТАРТ БОТА ===")
 
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("❌ Не заданы TELEGRAM_TOKEN или TELEGRAM_CHAT_ID")
+        return
+
     bot = Bot(token=TELEGRAM_TOKEN)
     memory = load_memory()
     sent_today = 0
@@ -130,13 +134,17 @@ def main():
 
             message, keyboard = build_message(category, translated_title, translated_abstract, link)
 
-            bot.send_message(
-                chat_id=TELEGRAM_CHAT_ID,
-                text=message,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-                disable_web_page_preview=True,
-            )
+            try:
+                bot.send_message(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    text=message,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                print("Ошибка отправки в Telegram:", e)
+                continue
 
             memory.add(pmid)
             sent_today += 1
@@ -150,4 +158,4 @@ def main():
 
 
 if __name__ == "__main__":
-    m
+    main()
