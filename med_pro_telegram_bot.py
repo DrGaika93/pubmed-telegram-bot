@@ -139,9 +139,7 @@ def main():
             title, abstract, link = pubmed_fetch(pmid)
 
             translated_title = translate_to_russian(title)
-            translated_abstract = translate_to_russian(abstract)
-
-            message, keyboard = build_message(category, translated_title, translated_abst
+            translated_abstract, link)
 
             bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
