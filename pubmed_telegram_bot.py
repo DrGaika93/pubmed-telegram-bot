@@ -163,37 +163,7 @@ def main():
     save_memory(memory)
 
 
-def main():
-    print("=== БОТ ЗАПУЩЕН ===")
+if __name__ == "__main__":
+    main()
 
-    total_sent = 0
-
-    for name, url in SOURCES.items():
-        print(f"\nПроверяем источник: {name}")
-        articles = parse_rss(url)
-
-        print(f"Найдено статей: {len(articles)}")
-
-        if not articles:
-            continue
-
-        for article in articles[:MAX_ARTICLES_PER_RUN]:
-            if article["link"] in sent_links:
-                print("Уже отправляли:", article["title"])
-                continue
-
-            print("Отправляем:", article["title"])
-
-            send_article(article, name)
-            sent_links.add(article["link"])
-            total_sent += 1
-
-    save_sent_links()
-
-    print(f"\nИТОГО отправлено статей: {total_sent}")
-
-    if total_sent == 0:
-        print("❌ Новых статей не найдено")
-    else:
-        print("✅ Готово")
 
