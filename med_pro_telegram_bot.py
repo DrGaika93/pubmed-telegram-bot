@@ -1,5 +1,5 @@
 print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
-
+import feedparser
 import os
 import json
 import time
@@ -22,11 +22,14 @@ TOPICS = {
     "🩺 Терапия": "(therapy OR treatment OR clinical)",
 }
 
-CYBERLENINKA_TOPICS = {
-    "🫁 Пульмонология": "пульмонология",
-    "🌿 Аллергология": "аллергия",
-    "🩺 Терапия": "терапия",
+CYBERLENINKA_RSS = {
+    "🫁 Пульмонология": "https://cyberleninka.ru/rss/pulmonologiya",
+    "🌿 Аллергология": "https://cyberleninka.ru/rss/allergologiya",
+    "🩺 Терапия": "https://cyberleninka.ru/rss/terapiya",
 }
+
+CYBERLENINKA_LIMIT = 2
+
 
 
 # ================= MEMORY =================
@@ -95,46 +98,27 @@ def fetch_pubmed_details(pmid: str):
 
 # ================= CYBERLENINKA =================
 
-def parse_cyberleninka(query: str, limit: int = 3):
-    print(f"Поиск КиберЛенинка: {query}")
-
-    url = f"https://cyberleninka.ru/search?q={query}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    }
+def parse_cyberleninka_rss(category: str, url: str):
+    print(f"RSS КиберЛенинка: {category}")
 
     try:
-        r = requests.get(url, headers=headers, timeout=20)
-
-        if r.status_code != 200:
-            print("КиберЛенинка вернула статус:", r.status_code)
-            return []
-
-        soup = BeautifulSoup(r.text, "html.parser")
-
+        feed = feedparser.parse(url)
         articles = []
 
-        # НОВЫЙ селектор (актуальный)
-        for item in soup.select("div.article-item")[:limit]:
-
-            a_tag = item.select_one("a")
-            title_tag = item.select_one("div.title")
-
-            if not a_tag or not title_tag:
-                continue
-
-            title = title_tag.get_text(strip=True)
-            link = "https://cyberleninka.ru" + a_tag["href"]
-            summary = "Русскоязычная статья (КиберЛенинка)"
+        for entry in feed.entries[:CYBERLENINKA_LIMIT]:
+            title = entry.title
+            link = entry.link
+            summary = entry.summary if "summary" in entry else "Русскоязычная статья"
 
             articles.append((title, summary, link))
 
-        print(f"Найдено в КиберЛенинке: {len(articles)}")
+        print(f"Найдено RSS-статей: {len(articles)}")
         return articles
 
     except Exception as e:
-        print("Ошибка КиберЛенинки:", e)
+        print("Ошибка RSS КиберЛенинки:", e)
         return []
+
 
 # ================= TELEGRAM MESSAGE =================
 
@@ -216,46 +200,46 @@ async def main():
             break
 
     # ========= CYBERLENINKA =========
-    print("=== КИБЕРЛЕНИНКА ===")
+   print("=== КИБЕРЛЕНИНКА ===")
 
-    if sent_today < MAX_ARTICLES_PER_DAY:
-        for category in ["пульмонология", "аллергология", "терапия"]:
+sent_cyber = 0
 
-            articles = parse_cyberleninka(category, limit=3)
+if sent_today < MAX_ARTICLES_PER_DAY:
+    for category, rss_url in CYBERLENINKA_RSS.items():
 
-            for title, summary, link in articles:
-                if sent_today >= MAX_ARTICLES_PER_DAY:
-                    break
+        articles = parse_cyberleninka_rss(category, rss_url)
 
-                if link in memory:
-                    continue
-
-                message, keyboard = build_message(category, title, summary, link)
-
-                try:
-                    await bot.send_message(
-                        chat_id=TELEGRAM_CHAT_ID,
-                        text=message,
-                        parse_mode="HTML",
-                        reply_markup=keyboard,
-                        disable_web_page_preview=True,
-                    )
-                except Exception as e:
-                    print("Ошибка Telegram:", e)
-                    continue
-
-                memory.add(link)
-                sent_today += 1
-                sent_cyber += 1
-                time.sleep(2)
+        for title, summary, link in articles:
 
             if sent_today >= MAX_ARTICLES_PER_DAY:
                 break
 
-    save_memory(memory)
+            if link in memory:
+                continue
 
-    print(f"✅ PubMed отправлено: {sent_today - sent_cyber}")
-    print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
+            message, keyboard = build_message(category, title, summary, link)
+
+            try:
+                bot.send_message(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    text=message,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                print("Ошибка Telegram:", e)
+                continue
+
+            memory.add(link)
+            sent_today += 1
+            sent_cyber += 1
+            time.sleep(2)
+
+        if sent_today >= MAX_ARTICLES_PER_DAY:
+            break
+
+print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
 
 
 
