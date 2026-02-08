@@ -164,42 +164,7 @@ def main():
     memory = load_memory()
     sent_today = 0
 
-    # -------- PUBMED --------
-    print("=== PUBMED ===")
-
-    for category, query in TOPICS.items():
-        pmids = search_pubmed(query)
-
-        for pmid in pmids:
-            if sent_today >= MAX_ARTICLES_PER_DAY:
-                break
-
-            if pmid in memory:
-                continue
-
-            title, abstract, link = fetch_details(pmid)
-
-            title = translate_to_russian(title)
-            abstract = translate_to_russian(abstract)
-
-            message, keyboard = build_message(category, title, abstract, link)
-
-            bot.send_message(
-                chat_id=TELEGRAM_CHAT_ID,
-                text=message,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-                disable_web_page_preview=True,
-            )
-
-            memory.add(pmid)
-            sent_today += 1
-            time.sleep(2)
-
-        if sent_today >= MAX_ARTICLES_PER_DAY:
-            break
-
-    # -------- CYBERLENINKA --------
+    # -------- СНАЧАЛА КИБЕРЛЕНИНКА --------
     print("=== КИБЕРЛЕНИНКА ===")
 
     for category, url in CYBERLENINKA_URLS.items():
@@ -226,6 +191,41 @@ def main():
             )
 
             memory.add(link)
+            sent_today += 1
+            time.sleep(2)
+
+    # -------- ПОТОМ PUBMED (если не хватило статей) --------
+    print("=== PUBMED ===")
+
+    for category, query in TOPICS.items():
+        if sent_today >= MAX_ARTICLES_PER_DAY:
+            break
+
+        pmids = search_pubmed(query)
+
+        for pmid in pmids:
+            if sent_today >= MAX_ARTICLES_PER_DAY:
+                break
+
+            if pmid in memory:
+                continue
+
+            title, abstract, link = fetch_details(pmid)
+
+            title = translate_to_russian(title)
+            abstract = translate_to_russian(abstract)
+
+            message, keyboard = build_message(category, title, abstract, link)
+
+            bot.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=message,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+                disable_web_page_preview=True,
+            )
+
+            memory.add(pmid)
             sent_today += 1
             time.sleep(2)
 
