@@ -1,66 +1,119 @@
 import os
 import requests
-from bs4 import BeautifulSoup
-from telegram import Bot
+from datetime import datetime, timedelta
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
-# Environment variables
+# --- CONFIG ---
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+CHAT_ID = os.getenv("CHAT_ID")
 
-# Search URL for Russian-language articles on PubMed
-PUBMED_URL = "https://pubmed.ncbi.nlm.nih.gov/?term=russian+language&filter=simsearch2.ffrft"
+# PubMed search: last 1 day, Russian language
+PUBMED_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+FETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
+SENT_FILE = "sent_articles.txt"
+ARTICLES_PER_DAY = 5
 
-def get_latest_article():
-    """Fetch the latest article title, abstract, and link from PubMed."""
-    response = requests.get(PUBMED_URL, timeout=15)
-    response.raise_for_status()
-
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    article = soup.select_one("article.full-docsum")
-    if not article:
-        return None
-
-    title_tag = article.select_one("a.docsum-title")
-    if not title_tag:
-        return None
-
-    title = title_tag.get_text(strip=True)
-    link = "https://pubmed.ncbi.nlm.nih.gov" + title_tag["href"]
-
-    # Open article page to get abstract
-    article_page = requests.get(link, timeout=15)
-    article_page.raise_for_status()
-
-    article_soup = BeautifulSoup(article_page.text, "html.parser")
-
-    abstract_block = article_soup.select_one("div.abstract-content")
-    if abstract_block:
-        abstract = abstract_block.get_text(" ", strip=True)
-    else:
-        abstract = "Аннотация отсутствует."
-
-    return title, abstract, link
+bot = Bot(token=TELEGRAM_TOKEN)
 
 
-def send_to_telegram(text: str):
-    """Send message to Telegram."""
-    bot = Bot(token=TELEGRAM_TOKEN)
-    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text)
+def load_sent():
+    if not os.path.exists(SENT_FILE):
+        return set()
+    with open(SENT_FILE, "r", encoding="utf-8") as f:
+        return set(line.strip() for line in f)
+
+
+def save_sent(pmid):
+    with open(SENT_FILE, "a", encoding="utf-8") as f:
+        f.write(pmid + "\n")
+
+
+def search_pubmed():
+    yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y/%m/%d")
+
+    params = {
+        "db": "pubmed",
+        "term": "russian[lang]",
+        "reldate": 1,
+        "datetype": "pdat",
+        "retmax": 20,
+        "retmode": "json",
+    }
+
+    r = requests.get(PUBMED_URL, params=params)
+    r.raise_for_status()
+
+    return r.json()["esearchresult"]["idlist"]
+
+
+def get_summary(pmids):
+    params = {
+        "db": "pubmed",
+        "id": ",".join(pmids),
+        "retmode": "json",
+    }
+
+    r = requests.get(SUMMARY_URL, params=params)
+    r.raise_for_status()
+
+    return r.json()["result"]
+
+
+def get_full_abstract(pmid):
+    params = {
+        "db": "pubmed",
+        "id": pmid,
+        "retmode": "xml",
+    }
+
+    r = requests.get(FETCH_URL, params=params)
+    r.raise_for_status()
+
+    return r.text
+
+
+def format_message(title, abstract, url):
+    text = f"*{title}*\n\n{abstract[:900]}..."
+
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Читать полностью", url=url)]]
+    )
+
+    return text, keyboard
 
 
 def main():
-    article = get_latest_article()
+    sent = load_sent()
 
-    if not article:
-        send_to_telegram("Не удалось найти новые статьи в русских журналах.")
+    pmids = search_pubmed()
+    new_pmids = [p for p in pmids if p not in sent][:ARTICLES_PER_DAY]
+
+    if not new_pmids:
+        print("No new articles")
         return
 
-    title, abstract, link = article
+    summaries = get_summary(new_pmids)
 
-    message = f"📚 {title}\n\n{abstract}\n\nИсточник: {link}"
-    send_to_telegram(message)
+    for pmid in new_pmids:
+        article = summaries[pmid]
+
+        title = article.get("title", "Без названия")
+        abstract = article.get("elocationid", "Описание отсутствует")
+
+        url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+
+        text, keyboard = format_message(title, abstract, url)
+
+        bot.send_message(
+            chat_id=CHAT_ID,
+            text=text,
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+        )
+
+        save_sent(pmid)
 
 
 if __name__ == "__main__":
