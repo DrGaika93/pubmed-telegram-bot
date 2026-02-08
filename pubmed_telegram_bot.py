@@ -66,33 +66,33 @@ def send_to_telegram(text: str):
 
 
 def process_feeds():
-    """Проверка всех RSS и отправка новых статей"""
+    """Берём первую статью из RSS и отправляем в Telegram"""
 
     for rss_url in PUBMED_RSS_URLS:
         try:
             items = get_rss_items(rss_url)
 
-            for item in items:
-                link = item.get("link")
+            if not items:
+                print("RSS пустой:", rss_url)
+                continue
 
-                if link in sent_links:
-                    continue
+            item = items[0]  # ← берём САМУЮ НОВУЮ статью
 
-                title = item.get("title", "Без заголовка")
-                summary = item.get("summary", "")
+            title = item.get("title", "Без заголовка")
+            summary = item.get("summary", "")
+            link = item.get("link", "")
 
-                text = translate_and_summarize(title, summary, link)
+            text = translate_and_summarize(title, summary, link)
 
-                send_to_telegram(text)
+            send_to_telegram(text)
 
-                sent_links.add(link)
-
-                # чтобы Telegram не заблокировал за частые сообщения
-                time.sleep(2)
+            print("Статья отправлена:", title)
 
         except Exception as e:
             print("Ошибка обработки RSS:", e)
 
+
 if __name__ == "__main__":
-    send_to_telegram("ТЕСТ: бот запустился и умеет отправлять сообщения.")
+    process_feeds()
+
 
