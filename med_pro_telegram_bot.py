@@ -134,13 +134,18 @@ def parse_cyberleninka(query: str, limit: int = 3):
 
 # ================= MAIN =================
 
-async def main():
+def main():
     print("=== СТАРТ БОТА ===")
 
-    bot = Bot(token=TELEGRAM_TOKEN)
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("❌ Не заданы TELEGRAM_TOKEN или TELEGRAM_CHAT_ID")
+        return
 
+    bot = Bot(token=TELEGRAM_TOKEN)
     memory = load_memory()
-    sent_today = 0
+
+    sent_pubmed = 0
+    sent_cyber = 0
 
     # -------- PUBMED --------
     print("=== PUBMED ===")
@@ -149,7 +154,7 @@ async def main():
         pmids = search_pubmed(query)
 
         for pmid in pmids:
-            if sent_today >= MAX_ARTICLES_PER_DAY:
+            if sent_pubmed >= MAX_ARTICLES_PER_DAY:
                 break
 
             if pmid in memory:
@@ -157,10 +162,13 @@ async def main():
 
             title, abstract, link = fetch_pubmed_details(pmid)
 
+            title = translate_to_russian(title)
+            abstract = translate_to_russian(abstract)
+
             message, keyboard = build_message(category, title, abstract, link)
 
             try:
-                await bot.send_message(
+                bot.send_message(
                     chat_id=TELEGRAM_CHAT_ID,
                     text=message,
                     parse_mode="HTML",
@@ -172,58 +180,51 @@ async def main():
                 continue
 
             memory.add(pmid)
-            sent_today += 1
-            await asyncio.sleep(2)
+            sent_pubmed += 1
+            time.sleep(2)
 
-        if sent_today >= MAX_ARTICLES_PER_DAY:
+        if sent_pubmed >= MAX_ARTICLES_PER_DAY:
             break
 
     # -------- CYBERLENINKA --------
     print("=== КИБЕРЛЕНИНКА ===")
 
-CYBER_QUERIES = [
-    "пульмонология",
-    "аллергология",
-    "терапия",
-]
+    if sent_pubmed < MAX_ARTICLES_PER_DAY:
+        for category in TOPICS.keys():
+            articles = parse_cyberleninka(category, limit=3)
 
-sent_cyber = 0
-CYBERLENINKA_LIMIT = 3
+            for title, summary, link in articles:
+                if sent_pubmed + sent_cyber >= MAX_ARTICLES_PER_DAY:
+                    break
 
-if sent_today < MAX_ARTICLES_PER_DAY:
-    for query in CYBER_QUERIES:
-        articles = parse_cyberleninka(query, limit=CYBERLENINKA_LIMIT)
+                if link in memory:
+                    continue
 
-        for title, summary, link in articles:
-            if sent_today >= MAX_ARTICLES_PER_DAY:
+                message, keyboard = build_message(category, title, summary, link)
+
+                try:
+                    bot.send_message(
+                        chat_id=TELEGRAM_CHAT_ID,
+                        text=message,
+                        parse_mode="HTML",
+                        reply_markup=keyboard,
+                        disable_web_page_preview=True,
+                    )
+                except Exception as e:
+                    print("Ошибка Telegram:", e)
+                    continue
+
+                memory.add(link)
+                sent_cyber += 1
+                time.sleep(2)
+
+            if sent_pubmed + sent_cyber >= MAX_ARTICLES_PER_DAY:
                 break
 
-            if link in memory:
-                continue
+    save_memory(memory)
 
-            message, keyboard = build_message("🇷🇺 КиберЛенинка", title, summary, link)
-
-            try:
-                await bot.send_message(
-                    chat_id=TELEGRAM_CHAT_ID,
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=keyboard,
-                    disable_web_page_preview=True,
-                )
-            except Exception as e:
-                print("Ошибка Telegram:", e)
-                continue
-
-            memory.add(link)
-            sent_today += 1
-            sent_cyber += 1
-            time.sleep(2)
-
-        if sent_today >= MAX_ARTICLES_PER_DAY:
-            break
-
-print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
+    print(f"✅ PubMed отправлено: {sent_pubmed}")
+    print(f"✅ КиберЛенинка отправлено: {sent_cyber}")
 
 
 # ================= RUN =================
