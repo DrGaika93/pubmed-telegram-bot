@@ -94,4 +94,5 @@ def process_feeds():
             print("Ошибка обработки RSS:", e)
 
 if __name__ == "__main__":
-    process_feeds()
+    send_to_telegram("ТЕСТ: бот запустился и умеет отправлять сообщения.")
+
