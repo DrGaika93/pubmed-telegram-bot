@@ -1,3 +1,4 @@
+print("=== СТАРТ БОТА ===")
 print("ФАЙЛ ЗАГРУЖЕН ВЕРНЫЙ")
 # pubmed_telegram_bot.py — PRO+ версия
 
@@ -117,7 +118,7 @@ def build_message(category: str, title: str, text: str, link: str):
 
 
 def main():
-    bot = Bot(token=TELEGRAM_TOKEN)
+    print("=== ВНУТРИ MAIN ===")
 
     memory = load_memory()
     sent_today = 0
