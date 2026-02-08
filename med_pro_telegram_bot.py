@@ -172,6 +172,7 @@ def main():
             break
 
         articles = parse_cyberleninka(category, url)
+        print("КиберЛенинка нашла:", len(articles))
 
         for title, abstract, link in articles:
             if sent_today >= MAX_ARTICLES_PER_DAY:
